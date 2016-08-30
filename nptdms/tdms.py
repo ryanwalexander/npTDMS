@@ -184,7 +184,9 @@ class TdmsFile(object):
         with Timer(log, "Read data"):
             # Now actually read all the data
             for segment in self.segments:
-                segment.read_raw_data(tdms_file)
+                # mranga -- fixed.
+                #segment.read_raw_data(tdms_file)
+                pass
 
     def _path(self, *args):
         """Convert group and channel to object path"""
@@ -385,6 +387,7 @@ class _TdmsSegment(object):
         for obj in range(num_objects):
             # Read the object path
             object_path = read_string(f)
+            print ("object_path " + str(object_path))
 
             # If this is a new segment for an existing object,
             # reuse the existing object, otherwise,
@@ -834,6 +837,7 @@ class _TdmsSegmentObject(object):
             log.debug("Property %s (%s): %s" % (
                 prop_name, prop_data_type.name, value))
             self.tdms_object.properties[prop_name] = value
+            print "stuffing property ", prop_name, " value = " , str(value)
 
     @property
     def path(self):
