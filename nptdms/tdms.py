@@ -4,6 +4,7 @@ import itertools
 import logging
 import struct
 import sys
+import json
 from collections import namedtuple
 try:
     from collections import OrderedDict
@@ -132,7 +133,7 @@ class TdmsFile(object):
 
     """
 
-    def __init__(self, file, memmap_dir=None):
+    def __init__(self, file, memmap_dir=None, read_data=False):
         """Initialise a new TDMS file object, reading all data.
 
         :param file: Either the path to the tdms file to read or an already
@@ -147,6 +148,8 @@ class TdmsFile(object):
         self.segments = []
         self.objects = OrderedDict()
         self.memmap_dir = memmap_dir
+        self.read_data = read_data
+        self.props = {}
 
         if hasattr(file, "read"):
             # Is a file
@@ -163,6 +166,7 @@ class TdmsFile(object):
             while True:
                 try:
                     segment = _TdmsSegment(tdms_file)
+                    # Save the metadata
                 except EOFError:
                     # We've finished reading the file
                     break
@@ -178,15 +182,30 @@ class TdmsFile(object):
 
         with Timer(log, "Allocate space"):
             # Allocate space for data
-            for object in self.objects.values():
-                object._initialise_data(memmap_dir=self.memmap_dir)
+            if self.read_data:
+                for object in self.objects.values():
+                    object._initialise_data(memmap_dir=self.memmap_dir)
 
         with Timer(log, "Read data"):
             # Now actually read all the data
-            for segment in self.segments:
-                # mranga -- fixed.
-                #segment.read_raw_data(tdms_file)
-                pass
+            if self.read_data:
+                for segment in self.segments:
+                    segment.read_raw_data(tdms_file)
+
+        props_of_interest = {"niRF_acquisition_timestamp", "niRF_gain",
+                "name","niRF_IQ_sample_rate","niRF_RF_center_frequency"}
+
+        for segment in self.segments:
+            for obj in segment.get_ordered_objects():
+                #print "Prop " , obj.get_properties()
+                pr = obj.get_properties()
+                for p in props_of_interest:
+                    if pr.has_key(p) :
+                        self.props[p] = str(pr[p])
+
+
+    def getJsonMetadata(self):
+        return json.loads(json.dumps(self.props))
 
     def _path(self, *args):
         """Convert group and channel to object path"""
@@ -387,7 +406,6 @@ class _TdmsSegment(object):
         for obj in range(num_objects):
             # Read the object path
             object_path = read_string(f)
-            print ("object_path " + str(object_path))
 
             # If this is a new segment for an existing object,
             # reuse the existing object, otherwise,
@@ -426,6 +444,9 @@ class _TdmsSegment(object):
             obj._previous_segment_object = segment_obj
 
         self.calculate_chunks()
+
+    def get_ordered_objects(self):
+        return self.ordered_objects
 
     def calculate_chunks(self):
         """
@@ -837,7 +858,10 @@ class _TdmsSegmentObject(object):
             log.debug("Property %s (%s): %s" % (
                 prop_name, prop_data_type.name, value))
             self.tdms_object.properties[prop_name] = value
-            print "stuffing property ", prop_name, " value = " , str(value)
+            #print "property ", prop_name, " value = " , str(value)
+
+    def get_properties(self):
+        return self.tdms_object.properties
 
     @property
     def path(self):
